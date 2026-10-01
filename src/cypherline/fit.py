@@ -217,6 +217,11 @@ def score_take(
     only the linear part of that wander.
     """
     onsets = sorted(float(o) for o in onsets)
+    # NaN/inf means the extractor failed, not that the performer was off the
+    # beat. Reporting it as a REJECT would send a contributor back to re-record
+    # a take that may be fine, so fail loudly instead.
+    if not all(math.isfinite(o) for o in onsets):
+        raise ValueError("onsets must all be finite (no NaN or infinity).")
     step = grid.mean_interval / subdivision
     origin = grid.beat_times[0]
 
