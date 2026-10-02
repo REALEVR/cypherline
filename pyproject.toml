@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cypherline"
+version = "0.1.0"
+description = "Rhythm-matching for crowdsourced cyphers: beat-grid detection and rhythm-fit scoring."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# Only cypherline.extract needs these. The grid, fit and align modules are
+# stdlib-only so the scoring logic stays testable without a DSP stack.
+audio = ["librosa>=0.10", "soundfile>=0.12"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

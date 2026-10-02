@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every version here was run locally before this workflow was committed.
+        # A matrix entry nobody has executed is a guess, and a CI config built on
+        # a guess fails on its first run.
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Installed as the package, not by path-hacking, so the test run exercises
+      # the same import surface a consumer gets. The [audio] extra is deliberately
+      # NOT installed: the grid, fit and align modules must keep working without
+      # librosa, and this job is what proves that stays true.
+      - name: Install package and dev dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Run tests
+        run: python -m pytest -q
