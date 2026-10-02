@@ -65,3 +65,25 @@ def test_bar_numbering_counts_from_the_first_downbeat():
     assert g.bar_of(0.0) == 0
     assert g.bar_of(1.9) == 0   # still inside bar 1 (4 beats = 2.0 s)
     assert g.bar_of(2.1) == 1
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+def test_non_finite_beat_times_are_rejected(bad):
+    with pytest.raises(ValueError, match="finite"):
+        BeatGrid(beat_times=(0.0, 0.5, bad))
+
+
+def test_zero_length_interval_is_rejected():
+    with pytest.raises(ValueError, match="strictly ascending"):
+        BeatGrid(beat_times=(1.0, 1.0))
+
+
+@pytest.mark.parametrize("bpm", [float("nan"), float("inf"), 0.0, -90.0])
+def test_from_bpm_rejects_unusable_tempo(bpm):
+    with pytest.raises(ValueError, match="bpm"):
+        BeatGrid.from_bpm(bpm, duration_sec=10.0)
+
+
+def test_from_bpm_rejects_non_finite_duration():
+    with pytest.raises(ValueError, match="finite"):
+        BeatGrid.from_bpm(90.0, duration_sec=float("nan"))

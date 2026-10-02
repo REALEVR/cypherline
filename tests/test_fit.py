@@ -174,3 +174,11 @@ def test_analysis_is_immutable():
     a = score_take(on_grid(12), GRID)
     with pytest.raises(Exception):
         a.score = 0.0  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_non_finite_onsets_raise_instead_of_scoring_as_a_reject(bad):
+    """A broken extractor must not read as a bad performance."""
+    grid = BeatGrid.from_bpm(90.0, duration_sec=32.0)
+    with pytest.raises(ValueError, match="finite"):
+        score_take([0.1, bad, 0.5, 0.9], grid)

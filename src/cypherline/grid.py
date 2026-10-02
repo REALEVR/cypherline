@@ -12,6 +12,7 @@ usually is).
 
 from __future__ import annotations
 
+import math
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
@@ -28,8 +29,12 @@ class BeatGrid:
     def __post_init__(self) -> None:
         if len(self.beat_times) < 2:
             raise ValueError("A grid needs at least two beats to have an interval.")
-        if list(self.beat_times) != sorted(self.beat_times):
-            raise ValueError("beat_times must be sorted ascending.")
+        if not all(math.isfinite(t) for t in self.beat_times):
+            raise ValueError("beat_times must all be finite (no NaN or infinity).")
+        # Strict: equal neighbours give a zero-length interval, which makes bpm
+        # and every grid step degenerate.
+        if any(b <= a for a, b in zip(self.beat_times, self.beat_times[1:])):
+            raise ValueError("beat_times must be sorted strictly ascending.")
         if self.beats_per_bar < 1:
             raise ValueError("beats_per_bar must be at least 1.")
         if not 0 <= self.downbeat_index < len(self.beat_times):
@@ -45,8 +50,10 @@ class BeatGrid:
         beats_per_bar: int = 4,
     ) -> BeatGrid:
         """A perfectly constant grid. Convenient, but real audio drifts."""
-        if bpm <= 0:
-            raise ValueError("bpm must be positive.")
+        if not (math.isfinite(bpm) and bpm > 0):
+            raise ValueError("bpm must be a positive, finite number.")
+        if not (math.isfinite(duration_sec) and math.isfinite(first_beat_sec)):
+            raise ValueError("duration_sec and first_beat_sec must be finite.")
         interval = 60.0 / bpm
         n = int((duration_sec - first_beat_sec) / interval) + 1
         if n < 2:
