@@ -63,6 +63,16 @@ else:
 
 `plan.stretch_ratio` must be applied with a **time-stretch** algorithm (phase vocoder / WSOLA), not by changing playback rate — the latter transposes the voice.
 
+### Runnable example
+
+`examples/triage_takes.py` scores three synthetic takes and prints the outcome for each:
+
+```bash
+PYTHONPATH=src python examples/triage_takes.py
+```
+
+A take 120 ms late (more than half a 90 BPM sixteenth, ~167 ms) is planned as a +47 ms shift: offset is only identifiable modulo one grid step, so the smallest equivalent shift to the next grid position is reported. The 2%-slow take gets a stretch of x0.98, and the scattered take is rejected.
+
 ## Tests
 
 ```bash
