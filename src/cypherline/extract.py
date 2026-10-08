@@ -12,6 +12,8 @@ with well-tested implementations; the product's own contribution is what
 
 from __future__ import annotations
 
+import math
+
 from .grid import BeatGrid
 
 _MISSING = (
@@ -30,6 +32,14 @@ def _require_librosa():
     return librosa
 
 
+def _load(librosa, path: str):
+    """Load audio, failing with a message that names the file and the problem."""
+    y, sr = librosa.load(path, mono=True)
+    if len(y) == 0:
+        raise ValueError(f"{path!r} contains no audio samples.")
+    return y, sr
+
+
 def grid_from_audio(path: str, *, beats_per_bar: int = 4) -> BeatGrid:
     """Detect the beat grid of an instrumental.
 
@@ -38,12 +48,17 @@ def grid_from_audio(path: str, *, beats_per_bar: int = 4) -> BeatGrid:
     constant.
     """
     librosa = _require_librosa()
-    y, sr = librosa.load(path, mono=True)
+    y, sr = _load(librosa, path)
     _, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="frames")
-    times = librosa.frames_to_time(beat_frames, sr=sr)
+    times = [float(t) for t in librosa.frames_to_time(beat_frames, sr=sr)]
     if len(times) < 2:
-        raise ValueError(f"Could not find a usable beat in {path!r}.")
-    return BeatGrid(beat_times=tuple(float(t) for t in times), beats_per_bar=beats_per_bar)
+        raise ValueError(
+            f"Could not find a usable beat in {path!r}: the tracker returned "
+            f"{len(times)} beat(s). Silent or very short audio is the usual cause."
+        )
+    if not all(math.isfinite(t) for t in times):
+        raise ValueError(f"Beat tracker returned non-finite beat times for {path!r}.")
+    return BeatGrid(beat_times=tuple(times), beats_per_bar=beats_per_bar)
 
 
 def onsets_from_audio(path: str, *, backtrack: bool = True) -> list[float]:
@@ -55,6 +70,14 @@ def onsets_from_audio(path: str, *, backtrack: bool = True) -> list[float]:
     a consonant's length, and `fit.score_take` would read that as lag.
     """
     librosa = _require_librosa()
-    y, sr = librosa.load(path, mono=True)
+    y, sr = _load(librosa, path)
     frames = librosa.onset.onset_detect(y=y, sr=sr, units="frames", backtrack=backtrack)
-    return [float(t) for t in librosa.frames_to_time(frames, sr=sr)]
+    onsets = [float(t) for t in librosa.frames_to_time(frames, sr=sr)]
+    if not onsets:
+        raise ValueError(
+            f"No onsets detected in {path!r}. The take may be silent or too quiet "
+            "to analyse; an empty take cannot be scored."
+        )
+    if not all(math.isfinite(t) for t in onsets):
+        raise ValueError(f"Onset detector returned non-finite times for {path!r}.")
+    return onsets
