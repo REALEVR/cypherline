@@ -90,3 +90,27 @@ def test_apply_to_is_anchored_on_the_first_event():
 
 def test_apply_to_handles_an_empty_take():
     assert CorrectionPlan(shift_sec=1.0, stretch_ratio=1.0).apply_to([]) == []
+
+
+def test_plan_aligns_a_take_that_rushes():
+    """Negative drift (a take faster than the grid) must stretch, not shrink further."""
+    drift = -0.02
+    base = on_grid(24)
+    t0 = base[0]
+    onsets = [t0 + (t - t0) * (1.0 + drift) for t in base]
+
+    plan = plan_correction(score_take(onsets, GRID))
+
+    assert plan.stretch_ratio > 1.0
+    assert worst_grid_error(plan.apply_to(onsets)) < 0.01
+
+
+def test_stretch_ratio_stays_within_the_drift_bound():
+    from cypherline.fit import MAX_DRIFT_RATIO
+
+    base = on_grid(24)
+    t0 = base[0]
+    for drift in (-0.05, -0.02, 0.02, 0.05):
+        onsets = [t0 + (t - t0) * (1.0 + drift) for t in base]
+        plan = plan_correction(score_take(onsets, GRID))
+        assert abs(plan.stretch_ratio - 1.0) <= MAX_DRIFT_RATIO + 1e-6
