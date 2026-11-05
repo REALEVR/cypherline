@@ -182,3 +182,14 @@ def test_non_finite_onsets_raise_instead_of_scoring_as_a_reject(bad):
     grid = BeatGrid.from_bpm(90.0, duration_sec=32.0)
     with pytest.raises(ValueError, match="finite"):
         score_take([0.1, bad, 0.5, 0.9], grid)
+
+
+@pytest.mark.parametrize("subdivision", [0, -1, -4])
+def test_score_take_rejects_invalid_subdivision(subdivision: int) -> None:
+    """A non-positive subdivision is a caller bug, not a bad take.
+
+    It used to raise ZeroDivisionError (0) or return a bogus REJECT verdict
+    (negative), which would send a contributor off to re-record a fine take.
+    """
+    with pytest.raises(ValueError, match="subdivision"):
+        score_take(on_grid(10), GRID, subdivision=subdivision)

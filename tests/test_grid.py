@@ -87,3 +87,11 @@ def test_from_bpm_rejects_unusable_tempo(bpm):
 def test_from_bpm_rejects_non_finite_duration():
     with pytest.raises(ValueError, match="finite"):
         BeatGrid.from_bpm(90.0, duration_sec=float("nan"))
+
+
+def test_bar_of_rejects_non_finite_time() -> None:
+    """NaN compares false against everything, so it used to land in a bogus bar."""
+    grid = BeatGrid.from_bpm(120.0, duration_sec=10.0)
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite"):
+            grid.bar_of(bad)
