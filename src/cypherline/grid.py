@@ -117,8 +117,12 @@ class BeatGrid:
 
         Uses the beat at or *before* `t`: an event 0.4 of a beat before the next
         downbeat still belongs to the bar it is currently in, not the next one.
-        Times before the first downbeat clamp to bar 0.
+        Times before the first downbeat clamp to bar 0. Non-finite times raise
+        ValueError: NaN compares false against everything, so it would otherwise
+        be silently assigned to an arbitrary bar.
         """
+        if not math.isfinite(t):
+            raise ValueError("t must be finite (no NaN or infinity).")
         beat = bisect_right(self.beat_times, t) - 1
         if beat < self.downbeat_index:
             return 0

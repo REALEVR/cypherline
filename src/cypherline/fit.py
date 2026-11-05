@@ -216,6 +216,8 @@ def score_take(
     tempo genuinely wanders, it is an approximation, and the drift term absorbs
     only the linear part of that wander.
     """
+    if subdivision < 1:
+        raise ValueError("subdivision must be at least 1.")
     onsets = sorted(float(o) for o in onsets)
     # NaN/inf means the extractor failed, not that the performer was off the
     # beat. Reporting it as a REJECT would send a contributor back to re-record
