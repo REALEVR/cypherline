@@ -90,3 +90,33 @@ def test_apply_to_is_anchored_on_the_first_event():
 
 def test_apply_to_handles_an_empty_take():
     assert CorrectionPlan(shift_sec=1.0, stretch_ratio=1.0).apply_to([]) == []
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf")])
+def test_plan_rejects_unusable_stretch_ratio(bad: float) -> None:
+    """A zero or negative ratio collapses or reverses time; NaN/inf corrupts it.
+
+    None of these is a correction a renderer could perform, so the plan must
+    refuse to exist rather than hand garbage to the time-stretcher.
+    """
+    with pytest.raises(ValueError, match="stretch_ratio"):
+        CorrectionPlan(shift_sec=0.0, stretch_ratio=bad)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_plan_rejects_non_finite_shift(bad: float) -> None:
+    with pytest.raises(ValueError, match="shift_sec"):
+        CorrectionPlan(shift_sec=bad, stretch_ratio=1.0)
+
+
+def test_apply_to_rejects_non_finite_times() -> None:
+    """NaN breaks sorting, which silently anchored the plan on the wrong event."""
+    plan = CorrectionPlan(shift_sec=0.1, stretch_ratio=1.0)
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite"):
+            plan.apply_to([0.5, bad, 0.1])
+
+
+def test_apply_to_output_is_sorted_and_anchored_on_earliest_event() -> None:
+    plan = CorrectionPlan(shift_sec=0.0, stretch_ratio=2.0)
+    assert plan.apply_to([0.3, 0.1, 0.2]) == pytest.approx([0.1, 0.3, 0.5])

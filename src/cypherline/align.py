@@ -17,6 +17,7 @@ Two corrections exist, and both are safe because neither touches pitch:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .fit import FitAnalysis, Verdict
@@ -32,6 +33,15 @@ class CorrectionPlan:
     stretch_ratio: float
     """Multiply the take's duration by this. 1.0 means leave it alone."""
 
+    def __post_init__(self) -> None:
+        # A plan is handed straight to a renderer, so an impossible one must not
+        # be constructible. Zero collapses the take to an instant, a negative
+        # ratio plays it backwards, and NaN/inf poison every sample position.
+        if not math.isfinite(self.shift_sec):
+            raise ValueError("shift_sec must be finite (no NaN or infinity).")
+        if not (math.isfinite(self.stretch_ratio) and self.stretch_ratio > 0):
+            raise ValueError("stretch_ratio must be a positive, finite number.")
+
     @property
     def is_noop(self) -> bool:
         return abs(self.shift_sec) < 1e-4 and abs(self.stretch_ratio - 1.0) < 1e-6
@@ -43,7 +53,12 @@ class CorrectionPlan:
         renderer performs on samples. Anchored on the first event so the plan is
         independent of where the take sits in absolute time.
         """
-        times = sorted(float(t) for t in times)
+        times = [float(t) for t in times]
+        # NaN compares false against everything, so sorted() would leave the
+        # list in arbitrary order and the anchor below would be the wrong event.
+        if not all(math.isfinite(t) for t in times):
+            raise ValueError("times must all be finite (no NaN or infinity).")
+        times.sort()
         if not times:
             return []
         t0 = times[0]
