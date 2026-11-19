@@ -182,3 +182,37 @@ def test_non_finite_onsets_raise_instead_of_scoring_as_a_reject(bad):
     grid = BeatGrid.from_bpm(90.0, duration_sec=32.0)
     with pytest.raises(ValueError, match="finite"):
         score_take([0.1, bad, 0.5, 0.9], grid)
+
+
+# --- ACCEPT means "use as-is", so it must also mean "already aligned" --------
+
+
+def test_tight_but_late_take_is_correctable_not_accepted():
+    """A machine-tight take 60 ms late is great timing that still misses the
+    beat. Calling it ACCEPT would tell the caller to ship it unshifted."""
+    onsets = [t + 0.060 for t in on_grid(24)]
+    a = score_take(onsets, GRID)
+
+    assert a.scatter_phase <= 0.10, "the take itself is tight"
+    assert a.verdict is Verdict.CORRECTABLE
+    assert a.needs_correction
+    assert alignment_error(onsets, a) < 0.002
+
+
+def test_tight_but_drifting_take_is_correctable_not_accepted():
+    """3% slow is within the stretch budget, but over a verse it accumulates to
+    several grid steps — not something to use as-is."""
+    base = on_grid(48)
+    t0 = base[0]
+    onsets = [t0 + (t - t0) * 1.03 for t in base]
+    a = score_take(onsets, GRID)
+
+    assert a.drift_measured
+    assert a.drift_ratio == pytest.approx(0.03, abs=0.002)
+    assert a.verdict is Verdict.CORRECTABLE
+
+
+def test_tiny_residual_offset_still_accepts():
+    """A few ms of lag is below what the ear or the tolerance cares about."""
+    onsets = [t + 0.005 for t in on_grid(24)]
+    assert score_take(onsets, GRID).verdict is Verdict.ACCEPT
