@@ -57,6 +57,12 @@ MAX_DRIFT_RATIO = 0.06
 #: Below this many onsets, drift cannot be told from noise, so we do not claim
 #: to have measured it.
 MIN_ONSETS_FOR_DRIFT = 8
+#: ACCEPT means "use as-is", so a tight take must also already SIT on the grid.
+#: Residual misalignment (constant offset, plus drift accumulated across the
+#: take) above this fraction of a grid step makes it CORRECTABLE instead. It
+#: matches TIGHT_SCATTER_PHASE so "already aligned" is held to the same bar as
+#: "already tight".
+ACCEPT_MAX_MISALIGN_PHASE = TIGHT_SCATTER_PHASE
 #: How far the drift search looks. Wider than MAX_DRIFT_RATIO on purpose: we
 #: must be able to *measure* unrescuable drift in order to reject it.
 DRIFT_SEARCH_RANGE = 0.25
@@ -254,7 +260,11 @@ def score_take(
     scatter_phase = _scatter_turns(r)
     scatter_sec = scatter_phase * step
     score = max(0.0, min(1.0, 1.0 - scatter_phase / MAX_SCATTER_PHASE))
-    verdict, reason = _judge(scatter_phase, drift, drift_measured)
+    # Worst misalignment a caller would ship if it used the take as-is: the
+    # constant offset plus whatever drift accumulates by the last onset.
+    span = onsets[-1] - onsets[0]
+    misalign_phase = (abs(offset_sec) + abs(drift) * span) / step
+    verdict, reason = _judge(scatter_phase, drift, drift_measured, misalign_phase)
 
     return FitAnalysis(
         onset_count=len(onsets),
@@ -271,7 +281,12 @@ def score_take(
     )
 
 
-def _judge(scatter_phase: float, drift: float, drift_measured: bool) -> tuple[Verdict, str]:
+def _judge(
+    scatter_phase: float,
+    drift: float,
+    drift_measured: bool,
+    misalign_phase: float,
+) -> tuple[Verdict, str]:
     if scatter_phase > MAX_SCATTER_PHASE:
         return (
             Verdict.REJECT,
@@ -289,7 +304,16 @@ def _judge(scatter_phase: float, drift: float, drift_measured: bool) -> tuple[Ve
         )
 
     if scatter_phase <= TIGHT_SCATTER_PHASE:
-        return Verdict.ACCEPT, "In the pocket."
+        # Tight is necessary but not sufficient for "use as-is": a machine-tight
+        # take recorded 60 ms late, or running 3% slow, is a great take that
+        # still lands off the beat until it is shifted or stretched.
+        if misalign_phase <= ACCEPT_MAX_MISALIGN_PHASE:
+            return Verdict.ACCEPT, "In the pocket."
+        return (
+            Verdict.CORRECTABLE,
+            f"Tight take, but sits up to {misalign_phase:.0%} of a grid step "
+            f"off the beat — needs a shift and/or stretch to lock in.",
+        )
 
     return (
         Verdict.CORRECTABLE,
