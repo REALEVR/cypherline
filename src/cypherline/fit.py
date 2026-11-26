@@ -169,6 +169,34 @@ def _phases(onsets: list[float], origin: float, step: float, drift: float) -> li
     ]
 
 
+#: Floor on the number of coarse drift candidates, for short takes.
+MIN_DRIFT_SWEEP_STEPS = 200
+#: Coarse candidates per concentration-peak half-width. Two guarantees the
+#: sweep lands on the peak's upper half however the true drift falls between
+#: candidates, which is all the local refine needs.
+DRIFT_SWEEP_SAMPLES_PER_HALF_WIDTH = 2
+#: Local refine passes, each 8x finer than the last.
+DRIFT_REFINE_PASSES = 5
+
+
+def _drift_sweep_steps(span_sec: float, step: float) -> int:
+    """How many coarse drift candidates a take of this length needs.
+
+    The concentration peak around the true drift narrows as the take gets
+    longer: a drift error of d moves the last onset by span*d seconds, i.e.
+    span*d/step turns, and concentration collapses once that nears half a turn.
+    So the peak's half-width is about step / (2 * span). A fixed-resolution
+    sweep that is fine for a 30-second verse steps straight over the peak of a
+    full 3-minute take, and a perfectly tight take is then reported as scatter
+    and rejected — the exact failure "reject, don't force" must never produce.
+    """
+    if span_sec <= 0:
+        return MIN_DRIFT_SWEEP_STEPS
+    half_width = step / (2 * span_sec)
+    spacing = half_width / DRIFT_SWEEP_SAMPLES_PER_HALF_WIDTH
+    return max(MIN_DRIFT_SWEEP_STEPS, math.ceil(2 * DRIFT_SEARCH_RANGE / spacing))
+
+
 def _best_drift(onsets: list[float], origin: float, step: float) -> tuple[float, float]:
     """Drift ratio maximising phase concentration, plus that concentration.
 
@@ -180,21 +208,25 @@ def _best_drift(onsets: list[float], origin: float, step: float) -> tuple[float,
         return _circular(_phases(onsets, origin, step, d))[1]
 
     best_d, best_r = 0.0, concentration(0.0)
-    steps = 200
+    steps = _drift_sweep_steps(onsets[-1] - onsets[0], step)
     for i in range(steps + 1):
         d = -DRIFT_SEARCH_RANGE + (2 * DRIFT_SEARCH_RANGE) * i / steps
         r = concentration(d)
         if r > best_r:
             best_d, best_r = d, r
 
+    # Each pass searches +/- one spacing of the previous resolution around the
+    # best candidate so far, so the first pass covers the whole gap between
+    # coarse candidates rather than only its centre.
     span = (2 * DRIFT_SEARCH_RANGE) / steps
-    for _ in range(4):  # refine ~4 orders of magnitude finer
-        span /= 8
+    for _ in range(DRIFT_REFINE_PASSES):
+        centre = best_d
         for i in range(-8, 9):
-            d = best_d + span * i / 8
+            d = centre + span * i / 8
             r = concentration(d)
             if r > best_r:
                 best_d, best_r = d, r
+        span /= 8
     return best_d, best_r
 
 

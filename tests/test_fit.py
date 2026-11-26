@@ -182,3 +182,39 @@ def test_non_finite_onsets_raise_instead_of_scoring_as_a_reject(bad):
     grid = BeatGrid.from_bpm(90.0, duration_sec=32.0)
     with pytest.raises(ValueError, match="finite"):
         score_take([0.1, bad, 0.5, 0.9], grid)
+
+
+# --- Long takes ------------------------------------------------------------
+# The concentration peak around the true drift narrows as a take gets longer
+# (half-width ~ step / (2 * span)). A drift sweep with a fixed resolution that
+# is fine for a 30 s verse steps right over the peak of a full-length take, and
+# a machine-tight take then reads as pure scatter and gets REJECTED.
+
+LONG_GRID = BeatGrid.from_bpm(BPM, duration_sec=200.0)
+
+
+def long_take(drift: float, *, seconds: float = 180.0, offset: float = 0.05) -> list[float]:
+    base = [p for p in LONG_GRID.positions(4)[::2] if p < seconds]
+    t0 = base[0]
+    return [t0 + (t - t0) * (1.0 + drift) + offset for t in base]
+
+
+@pytest.mark.parametrize("drift", [0.0137, 0.0211, -0.0183, 0.0412])
+def test_drift_is_found_on_a_full_length_take(drift):
+    onsets = long_take(drift)
+    a = score_take(onsets, LONG_GRID)
+
+    assert a.drift_ratio == pytest.approx(drift, abs=1e-4)
+    assert a.verdict is not Verdict.REJECT, a.reason
+    assert a.scatter_phase == pytest.approx(0.0, abs=0.01)
+
+
+def test_scattered_full_length_take_is_still_rejected():
+    """A finer sweep must not let noise fit some drift by chance."""
+    rng = random.Random(23)
+    scatter = SIXTEENTH * 0.5
+    onsets = [t + rng.uniform(-scatter, scatter) for t in long_take(0.0)]
+    a = score_take(onsets, LONG_GRID)
+
+    assert a.verdict is Verdict.REJECT
+    assert a.drift_ratio == 0.0
